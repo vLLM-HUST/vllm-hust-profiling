@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import csv
+import argparse
 import json
 import math
+import os
 from pathlib import Path
 
 try:
@@ -14,9 +16,9 @@ except ImportError:  # pragma: no cover
     Image = ImageDraw = ImageFont = None
 
 
-TASK = Path(__file__).resolve().parents[1]
-DATA = TASK / "outputs/top10-all-scenes-20260723"
-BASE = Path("/workspace/vllm-hust-benchmark")
+PROJECT = Path(__file__).resolve().parents[1]
+DATA = Path(os.environ.get("RUN_DIR", PROJECT / "runs"))
+BASE = Path(os.environ.get("BENCHMARK_ROOT", "/workspace/vllm-hust-benchmark"))
 SCENARIOS = ["random-online", "prefix-repetition-online", "agent-research-online", "sharegpt-online"]
 BASE_FILES = {
     "random-online": "official-ascend-jan-2026-v0.18.0-random-online-qwen25-14b-910b2",
@@ -195,6 +197,13 @@ def make_figure(rows):
 
 
 def main():
+    global DATA, BASE
+    parser = argparse.ArgumentParser(description="Compare one run with the official v0.18.0 baseline manifests.")
+    parser.add_argument("--data-root", type=Path, default=DATA, help="run root containing analysis/metrics-primary-12-runs.csv")
+    parser.add_argument("--benchmark-root", type=Path, default=BASE, help="benchmark repository containing submissions/")
+    args = parser.parse_args()
+    DATA = args.data_root.expanduser().resolve()
+    BASE = args.benchmark_root.expanduser().resolve()
     rows = compare()
     outdir = DATA / "analysis"
     outdir.mkdir(parents=True, exist_ok=True)

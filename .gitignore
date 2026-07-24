@@ -1,8 +1,11 @@
-runs/*
+runs/**
 !runs/.gitkeep
-reports/generated/*
+reports/generated/**
 !reports/generated/.gitkeep
-figures/*
+figures/**
 !figures/.gitkeep
 __pycache__/
 *.pyc
+*.log
+*.db
+.DS_Store
