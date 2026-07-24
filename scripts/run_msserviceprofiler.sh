@@ -340,4 +340,25 @@ if grep -Eq '[1-9][0-9]* tasks failed' "$LOG_DIR/parse.log"; then
 fi
 
 echo "[profile] completed"
-find "$RUN_DIR" -maxdepth 3 -type f -printf '%p\\n' | sort
+echo "[profile] output summary:"
+printf '  run_dir: %s\n' "$RUN_DIR"
+for artifact_dir in raw parsed benchmark logs; do
+  artifact_path="$RUN_DIR/$artifact_dir"
+  if [[ -d "$artifact_path" ]]; then
+    artifact_count="$(find "$artifact_path" -type f | wc -l)"
+    printf '  %-10s %s files\n' "$artifact_dir/" "$artifact_count"
+  fi
+done
+for artifact in \
+  benchmark/random-online.json \
+  parsed/request.csv \
+  parsed/batch.csv \
+  parsed/chrome_tracing.json \
+  parsed/profiler.db \
+  logs/parse.log; do
+  if [[ -s "$RUN_DIR/$artifact" ]]; then
+    printf '  [ok] %s\n' "$artifact"
+  else
+    printf '  [missing] %s\n' "$artifact"
+  fi
+done
