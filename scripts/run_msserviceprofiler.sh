@@ -56,6 +56,8 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 CONFIG_FILE="${CONFIG_FILE:-$TASK_DIR/config/ms_service_profiler_config.json}"
 PROFILER_TIMELIMIT="${PROFILER_TIMELIMIT:-600}"
 
+"$SCRIPT_DIR/check_runtime_resources.sh" "$DEVICE" "$PORT"
+
 export ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES:-$DEVICE}"
 export ASCEND_VISIBLE_DEVICES="${ASCEND_VISIBLE_DEVICES:-$DEVICE}"
 export VLLM_PLUGINS="${VLLM_PLUGINS:-ascend,msserviceprofiler}"

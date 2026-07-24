@@ -24,3 +24,13 @@ python scripts/compare_v018_baseline.py --data-root "$ROOT_DIR"
 ```
 
 `DEVICE` 和 `PORT` 必须与其他并发任务错开；未设置 `DEVICE` 时默认使用 0 号 NPU，不自动选择空闲卡。
+
+未设置 `MODEL_14B` 或 `MODEL_7B` 时，配置会自动从 `/root/.cache/huggingface/hub` 查找对应模型的 snapshot；也可以在运行前显式覆盖模型路径。
+
+启动脚本会先检查 NPU 健康状态和端口绑定情况；检查失败会立即退出，不启动服务。
+
+Quickstart 不需要 worktree，直接使用容器中的 `/workspace/vllm-hust` 和
+`/workspace/vllm-ascend-hust`。只有需要并行测试多个分支，或需要修改源码并提交实验
+patch 时，才建议创建 worktree。
+
+默认使用 vLLM 和 vLLM-Ascend 当前 checkout 的 commit；需要固定版本时，运行前设置 `VLLM_COMMIT` 和/或 `VLLM_ASCEND_COMMIT`。
