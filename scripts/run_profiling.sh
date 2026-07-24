@@ -15,14 +15,14 @@ source "$TASK_DIR/config/paths.env"
 source "$TASK_DIR/config/versions.env"
 # shellcheck disable=SC1091
 source "$TASK_DIR/workloads/manifest.env"
-ROOT_DIR="${ROOT_DIR:-$TASK_DIR/outputs/top10-all-scenes-20260723}"
-RUNNER="$SCRIPT_DIR/run_msserviceprofiler_random_online.sh"
-DEVICE="${DEVICE:-1}"
+DEVICE="${DEVICE:-0}"
 PORT="${PORT:-18167}"
-COMMON_MODEL_14B="${MODEL_14B:-/root/.cache/huggingface/hub/models--Qwen--Qwen2.5-14B-Instruct/snapshots/cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8}"
-COMMON_MODEL_7B="${MODEL_7B:-/root/.cache/huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28}"
-SHAREGPT_DATASET="${SHAREGPT_DATASET:-/workspace/.ai-workspace/tasks/2026-07-13-opt-leaderboard/worktree/vllm-hust-benchmark/.benchmarks/runtime-data/current-benchmark-datasets/ShareGPT_V3_unfiltered_cleaned_split.json}"
-AGENT_DATASET="${AGENT_DATASET:-/workspace/vllm-hust-benchmark/scripts/traces/evoscientist-workload-custom.jsonl}"
+TEAM_USER="${TEAM_USER:-$(id -un)}"
+RUN_TAG="${RUN_TAG:-$(date -u +%Y%m%dT%H%M%SZ)-npu${DEVICE}}"
+ROOT_DIR="${ROOT_DIR:-$PROFILING_ROOT/runs/$TEAM_USER/$RUN_TAG}"
+RUNNER="$SCRIPT_DIR/run_msserviceprofiler.sh"
+COMMON_MODEL_14B="$MODEL_14B"
+COMMON_MODEL_7B="$MODEL_7B"
 MODE_FILTER="${MODE_FILTER:-both}"
 SCENARIO_FILTER="${SCENARIO_FILTER:-all}"
 RANDOM_PROMPTS="${RANDOM_PROMPTS:-32}"
@@ -35,8 +35,8 @@ SHAREGPT_PROMPTS="${SHAREGPT_PROMPTS:-32}"
 mkdir -p "$ROOT_DIR"
 {
   date -Is
-  printf 'vllm=%s\n' "$(git -C /workspace/vllm-hust rev-parse HEAD)"
-  printf 'vllm_ascend=%s\n' "$(git -C /workspace/vllm-ascend-hust rev-parse HEAD)"
+  printf 'vllm=%s\n' "$(git -C "$VLLM_ROOT" rev-parse HEAD)"
+  printf 'vllm_ascend=%s\n' "$(git -C "$VLLM_ASCEND_ROOT" rev-parse HEAD)"
   printf 'device=%s\n' "$DEVICE"
 } > "$ROOT_DIR/versions.txt"
 
@@ -65,7 +65,7 @@ run_one() {
     NUM_PROMPTS="$prompts" REQUEST_RATE="$rate" RANDOM_INPUT_LEN="$input" \
     BENCH_INPUT_LEN="$input" RANDOM_OUTPUT_LEN="$output" BENCH_OUTPUT_LEN="$output" \
     MAX_MODEL_LEN="$max_len" MAX_NUM_SEQS="$max_seqs" MAX_NUM_BATCHED_TOKENS="$max_tokens" \
-    GPU_MEMORY_UTILIZATION=0.75 PROFILER_TIMELIMIT=600 HF_HUB_OFFLINE=1 \
+    GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.75}" PROFILER_TIMELIMIT="$PROFILER_TIMELIMIT" HF_HUB_OFFLINE=1 \
     DATASET_PATH="$dataset" ADDITIONAL_CONFIG="$mode_additional_config" \
     $extra_env bash "$RUNNER"
 }

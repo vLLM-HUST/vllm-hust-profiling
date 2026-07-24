@@ -7,15 +7,18 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TASK_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+# Load shared repository/model defaults for direct use of this low-level runner.
+# shellcheck disable=SC1091
+source "$TASK_DIR/config/paths.env"
 
-RUN_DIR="${RUN_DIR:-$TASK_DIR/outputs/msserviceprofiler-random-online}"
+RUN_DIR="${RUN_DIR:-$PROFILING_ROOT/runs/$(id -un)/$(date -u +%Y%m%dT%H%M%SZ)-single}"
 RAW_DIR="$RUN_DIR/raw"
 PARSED_DIR="$RUN_DIR/parsed"
 BENCH_DIR="$RUN_DIR/benchmark"
 LOG_DIR="$RUN_DIR/logs"
 RUNTIME_CONFIG_FILE="$RUN_DIR/ms_service_profiler_config.json"
 
-MODEL_PATH="${MODEL_PATH:-/data/shared_models/Qwen2.5-7B-Instruct}"
+MODEL_PATH="${MODEL_PATH:-$MODEL_7B}"
 if [[ -z "${SERVED_MODEL_NAME:-}" ]]; then
   MODEL_BASENAME="$(basename -- "$MODEL_PATH" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9.' '-')"
   SERVED_MODEL_NAME="profiling-${MODEL_BASENAME%-}"
@@ -47,7 +50,7 @@ BENCH_BACKEND="${BENCH_BACKEND:-openai}"
 BENCH_ENDPOINT="${BENCH_ENDPOINT:-/v1/completions}"
 ADDITIONAL_CONFIG="${ADDITIONAL_CONFIG:-}"
 
-VLLM_REPO="${VLLM_REPO:-/workspace/vllm-hust}"
+VLLM_REPO="${VLLM_REPO:-$VLLM_ROOT}"
 VLLM_BIN="${VLLM_BIN:-vllm}"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 CONFIG_FILE="${CONFIG_FILE:-$TASK_DIR/config/ms_service_profiler_config.json}"

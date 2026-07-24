@@ -10,8 +10,10 @@ figures under the campaign directory.
 from __future__ import annotations
 
 import csv
+import argparse
 import json
 import math
+import os
 import re
 import sqlite3
 from collections import defaultdict
@@ -23,7 +25,7 @@ except ImportError:  # pragma: no cover - figures are optional in a bare parser 
     Image = ImageDraw = ImageFont = None
 
 
-ROOT = Path(__file__).resolve().parents[1] / "outputs/top10-all-scenes-20260723"
+ROOT = Path(os.environ.get("RUN_DIR", Path(__file__).resolve().parents[1] / "runs"))
 ANALYSIS = ROOT / "analysis"
 FIGURES = ROOT / "figures"
 SCENARIO_ORDER = [
@@ -288,7 +290,7 @@ def grouped_bar(path, title, labels, series, unit, percent=False):
     label_font = load_font(20)
     small_font = load_font(17)
     draw.text((50, 30), title, fill="#102a43", font=title_font)
-    draw.text((50, 82), "数据来源：outputs/top10-all-scenes-20260723/benchmark、parsed/request.csv、parsed/profiler.db", fill="#52606d", font=small_font)
+    draw.text((50, 82), "数据来源：本次运行目录下的 benchmark、parsed/request.csv、parsed/profiler.db", fill="#52606d", font=small_font)
     left, top, right, bottom = 110, 160, 1740, 870
     max_value = max(v for _, values, _ in series for v in values if v is not None) or 1
     max_value *= 1.18
@@ -370,6 +372,14 @@ def make_figures(ab, rows):
 
 
 def main():
+    global ROOT, ANALYSIS, FIGURES
+    parser = argparse.ArgumentParser(description="Analyze one vLLM profiling run directory.")
+    parser.add_argument("--data-root", type=Path, default=ROOT, help="one run root containing scenario-eager-* directories")
+    parser.add_argument("--output-dir", type=Path, default=None, help="analysis output directory; defaults to <data-root>/analysis")
+    args = parser.parse_args()
+    ROOT = args.data_root.expanduser().resolve()
+    ANALYSIS = args.output_dir.expanduser().resolve() if args.output_dir else ROOT / "analysis"
+    FIGURES = ANALYSIS.parent / "figures"
     rows = [one_run(path) for path in sorted(ROOT.iterdir()) if path.is_dir()]
     rows = [row for row in rows if row]
     primary = primary_rows(rows)
