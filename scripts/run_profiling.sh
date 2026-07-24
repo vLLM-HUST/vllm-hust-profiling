@@ -32,6 +32,8 @@ KV_PREFIX_PROMPTS="${KV_PREFIX_PROMPTS:-32}"
 AGENT_PROMPTS="${AGENT_PROMPTS:-32}"
 SHAREGPT_PROMPTS="${SHAREGPT_PROMPTS:-32}"
 
+"$SCRIPT_DIR/check_runtime_resources.sh" "$DEVICE" "$PORT"
+
 mkdir -p "$ROOT_DIR"
 {
   date -Is

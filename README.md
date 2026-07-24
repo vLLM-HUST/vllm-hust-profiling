@@ -37,9 +37,20 @@ bash scripts/check_environment.sh
 bash scripts/run_profiling.sh
 ```
 
-运行前请确保 `MODEL_14B`、`MODEL_7B`、`AGENT_DATASET` 和 `SHAREGPT_DATASET` 指向容器内真实存在的路径。若默认 `/workspace/models` 或 `/workspace/datasets` 不适用，可在 shell 中覆盖，或修改本地未提交的 `config/paths.env`。
+运行前请确保 `MODEL_14B`、`MODEL_7B`、`AGENT_DATASET` 和 `SHAREGPT_DATASET` 指向容器内真实存在的路径。未显式设置模型路径时，`config/paths.env` 会优先从 `/root/.cache/huggingface/hub` 的 `refs/main` 动态解析对应 snapshot；也可通过 `HF_CACHE_ROOT` 指定其他 Hugging Face cache 根目录。Agent 数据默认使用 benchmark 仓库中的 `scripts/traces/evoscientist-workload-custom.jsonl`；ShareGPT 默认使用 `/workspace/datasets/ShareGPT_V3_unfiltered_cleaned_split.json`，不使用 benchmark 仓库内的定制 ShareGPT 样本。若路径不适用，可在 shell 中覆盖，或修改本地未提交的 `config/paths.env`。
 
 脚本默认采集 6 个在线场景，并分别运行 `enforce_eager=true/false`。每个成员必须使用不同的 NPU、端口和结果目录。`DEVICE` 不设置时脚本使用 0 号卡，不会自动探测空闲 NPU。
+
+启动前会 fail fast 检查 `DEVICE` 是否能被 `npu-smi` 查询且健康状态为 `OK`，并检查 `PORT` 是否可以绑定。任一检查失败都会直接退出，不启动 vLLM，也不会开始 workload。
+
+## 是否需要 worktree
+
+- 只做 profiling：不需要 worktree。
+- 多个分支并行测试：建议使用 worktree，避免切换主仓。
+- profiling 前后修改源码、提交实验 patch：建议使用 worktree。
+- 只切换到最新代码并运行：直接使用 `/workspace/vllm-hust` 和 `/workspace/vllm-ascend-hust` 即可。
+
+profiling 脚本不会修改 vLLM 或 vLLM-Ascend 源码，运行数据写入本仓库的 `runs/` 目录。
 
 ## Smoke test
 
@@ -75,6 +86,6 @@ git pull --ff-only
 bash scripts/check_environment.sh
 ```
 
-版本约束见 [`config/versions.env`](config/versions.env)。环境检查失败时不要继续采集；先确认主仓和 vLLM-Ascend 仓库 commit、模型、数据集以及容器内 `ms_service_profiler` 是否匹配。
+版本配置见 [`config/versions.env`](config/versions.env)。默认不固定 commit，环境检查会使用并记录两个代码仓库当前的 `HEAD`；只有显式设置 `VLLM_COMMIT` 或 `VLLM_ASCEND_COMMIT` 时，才会执行对应的 commit 强校验。需要复现实验时，可以在运行前设置这两个变量。
 
 更短的命令示例见 [`QUICKSTART.md`](QUICKSTART.md)，workload 说明见 [`workloads/README.md`](workloads/README.md)。

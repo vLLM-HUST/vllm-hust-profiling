@@ -26,8 +26,12 @@ command -v vllm >/dev/null 2>&1 || fail "vllm command is unavailable"
 
 actual_vllm="$(git -C "$VLLM_ROOT" rev-parse HEAD)"
 actual_ascend="$(git -C "$VLLM_ASCEND_ROOT" rev-parse HEAD)"
-[[ "$actual_vllm" == "$VLLM_COMMIT" ]] || fail "vllm commit $actual_vllm != $VLLM_COMMIT"
-[[ "$actual_ascend" == "$VLLM_ASCEND_COMMIT" ]] || fail "vllm-ascend commit $actual_ascend != $VLLM_ASCEND_COMMIT"
+if [[ -n "${VLLM_COMMIT:-}" && "$actual_vllm" != "$VLLM_COMMIT" ]]; then
+  fail "vllm commit $actual_vllm != requested $VLLM_COMMIT"
+fi
+if [[ -n "${VLLM_ASCEND_COMMIT:-}" && "$actual_ascend" != "$VLLM_ASCEND_COMMIT" ]]; then
+  fail "vllm-ascend commit $actual_ascend != requested $VLLM_ASCEND_COMMIT"
+fi
 
 for path in "$MODEL_14B" "$MODEL_7B" "$AGENT_DATASET" "$SHAREGPT_DATASET"; do
   [[ -e "$path" ]] || fail "required model/dataset path missing: $path"
@@ -40,5 +44,7 @@ fi
 echo "environment_ok"
 echo "vllm=$actual_vllm"
 echo "vllm_ascend=$actual_ascend"
+echo "vllm_commit_check=${VLLM_COMMIT:-auto}"
+echo "vllm_ascend_commit_check=${VLLM_ASCEND_COMMIT:-auto}"
 echo "model_14b=$MODEL_14B"
 echo "model_7b=$MODEL_7B"
