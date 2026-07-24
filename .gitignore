@@ -1,0 +1,8 @@
+runs/*
+!runs/.gitkeep
+reports/generated/*
+!reports/generated/.gitkeep
+figures/*
+!figures/.gitkeep
+__pycache__/
+*.pyc
