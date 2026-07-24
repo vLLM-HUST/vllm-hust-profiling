@@ -328,7 +328,7 @@ fi
 
 echo "[profile] parsing profiler data"
 PARSER_PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
-PYTHONPATH="$PARSER_PYTHONPATH" "$PYTHON_BIN" -m ms_service_profiler parse \
+PYTHONPATH="$PARSER_PYTHONPATH" "$PYTHON_BIN" "$SCRIPT_DIR/parse_msserviceprofiler.py" parse \
   --input-path "$RAW_DIR" \
   --output-path "$PARSED_DIR" \
   --format db csv json \

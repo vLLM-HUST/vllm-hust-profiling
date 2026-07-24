@@ -34,8 +34,18 @@ export PORT=18167               # 本次运行独占端口
 export ROOT_DIR="$PROFILING_ROOT/runs/$(id -un)/$(date -u +%Y%m%dT%H%M%SZ)-npu${DEVICE}"
 
 bash scripts/check_environment.sh
+SCENARIO_FILTER=random-online MODE_FILTER=both bash scripts/run_profiling.sh
+```
+
+这是最简单的 profiling 方式：只运行 `random-online`，并分别采集
+`enforce_eager=true/false`。完整多场景 profiling 使用：
+
+```bash
+bash scripts/check_environment.sh
 bash scripts/run_profiling.sh
 ```
+
+完整方式会运行全部在线场景和两种 `enforce_eager` 模式，耗时更长。
 
 运行前请确保 `MODEL_14B`、`MODEL_7B`、`AGENT_DATASET` 和 `SHAREGPT_DATASET` 指向容器内真实存在的路径。未显式设置模型路径时，`config/paths.env` 会优先从 `/root/.cache/huggingface/hub` 的 `refs/main` 动态解析对应 snapshot；也可通过 `HF_CACHE_ROOT` 指定其他 Hugging Face cache 根目录。Agent 数据默认使用 benchmark 仓库中的 `scripts/traces/evoscientist-workload-custom.jsonl`；ShareGPT 会依次从 `/workspace/datasets`、benchmark 数据集目录和 `/data/shared_datasets` 查找标准 `ShareGPT_V3_unfiltered_cleaned_split.json`，不使用 benchmark 仓库内的定制 ShareGPT 样本。已有的 `SHAREGPT_DATASET` 路径如果不存在，也会自动重新查找；有效的显式路径仍会优先保留。
 
@@ -76,7 +86,7 @@ python scripts/compare_v018_baseline.py \
   --benchmark-root /workspace/vllm-hust-benchmark
 ```
 
-分析结果写入该运行目录的 `analysis/` 和 `figures/`。来源是 benchmark JSON、msServiceProfiler 导出的 `request.csv`、`batch.csv`、`chrome_tracing.json` 及 `profiler.db`；这些文件和生成图片默认被 Git 忽略。
+分析结果写入该运行目录的 `analysis/` 和 `figures/`。来源是 benchmark JSON、msServiceProfiler 导出的 `request.csv`、`batch.csv`、`chrome_tracing.json` 及 `profiler.db`；这些文件和生成图片默认被 Git 忽略。解析入口包含针对当前容器 Pandas `StringDtype`/`rid` list 赋值问题的兼容处理。
 
 ## 更新代码后使用
 
@@ -88,4 +98,4 @@ bash scripts/check_environment.sh
 
 版本配置见 [`config/versions.env`](config/versions.env)。默认不固定 commit，环境检查会使用并记录两个代码仓库当前的 `HEAD`；只有显式设置 `VLLM_COMMIT` 或 `VLLM_ASCEND_COMMIT` 时，才会执行对应的 commit 强校验。需要复现实验时，可以在运行前设置这两个变量。
 
-更短的命令示例见 [`QUICKSTART.md`](QUICKSTART.md)，workload 说明见 [`workloads/README.md`](workloads/README.md)。
+最简命令见 [`QUICKSTART.md`](QUICKSTART.md)，workload 说明见 [`workloads/README.md`](workloads/README.md)。
