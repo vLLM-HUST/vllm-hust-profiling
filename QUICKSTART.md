@@ -7,14 +7,20 @@ source config/versions.env
 export DEVICE=0 PORT=18167
 export ROOT_DIR="$PROFILING_ROOT/runs/$(id -un)/$(date -u +%Y%m%dT%H%M%SZ)-npu${DEVICE}"
 bash scripts/check_environment.sh
+SCENARIO_FILTER=random-online MODE_FILTER=both bash scripts/run_profiling.sh
+```
+
+上面是最简单的 profiling 方式：只运行 `random-online`，并分别采集
+`enforce_eager=true/false`。
+
+完整多场景 profiling：
+
+```bash
+bash scripts/check_environment.sh
 bash scripts/run_profiling.sh
 ```
 
-只运行 random-online：
-
-```bash
-SCENARIO_FILTER=random-online MODE_FILTER=both bash scripts/run_profiling.sh
-```
+该方式会运行全部在线场景和两种 `enforce_eager` 模式，耗时更长。
 
 分析结果：
 
