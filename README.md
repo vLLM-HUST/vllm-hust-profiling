@@ -37,7 +37,7 @@ bash scripts/check_environment.sh
 bash scripts/run_profiling.sh
 ```
 
-运行前请确保 `MODEL_14B`、`MODEL_7B`、`AGENT_DATASET` 和 `SHAREGPT_DATASET` 指向容器内真实存在的路径。未显式设置模型路径时，`config/paths.env` 会优先从 `/root/.cache/huggingface/hub` 的 `refs/main` 动态解析对应 snapshot；也可通过 `HF_CACHE_ROOT` 指定其他 Hugging Face cache 根目录。Agent 数据默认使用 benchmark 仓库中的 `scripts/traces/evoscientist-workload-custom.jsonl`；ShareGPT 会依次从 `/workspace/datasets`、benchmark 数据集目录和 `/data/shared_datasets` 查找标准 `ShareGPT_V3_unfiltered_cleaned_split.json`，不使用 benchmark 仓库内的定制 ShareGPT 样本。若路径不适用，可通过环境变量覆盖。
+运行前请确保 `MODEL_14B`、`MODEL_7B`、`AGENT_DATASET` 和 `SHAREGPT_DATASET` 指向容器内真实存在的路径。未显式设置模型路径时，`config/paths.env` 会优先从 `/root/.cache/huggingface/hub` 的 `refs/main` 动态解析对应 snapshot；也可通过 `HF_CACHE_ROOT` 指定其他 Hugging Face cache 根目录。Agent 数据默认使用 benchmark 仓库中的 `scripts/traces/evoscientist-workload-custom.jsonl`；ShareGPT 会依次从 `/workspace/datasets`、benchmark 数据集目录和 `/data/shared_datasets` 查找标准 `ShareGPT_V3_unfiltered_cleaned_split.json`，不使用 benchmark 仓库内的定制 ShareGPT 样本。已有的 `SHAREGPT_DATASET` 路径如果不存在，也会自动重新查找；有效的显式路径仍会优先保留。
 
 脚本默认采集 6 个在线场景，并分别运行 `enforce_eager=true/false`。每个成员必须使用不同的 NPU、端口和结果目录。`DEVICE` 不设置时脚本使用 0 号卡，不会自动探测空闲 NPU。
 
