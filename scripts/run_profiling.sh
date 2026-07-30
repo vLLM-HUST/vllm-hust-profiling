@@ -26,6 +26,7 @@ COMMON_MODEL_7B="$MODEL_7B"
 MODE_FILTER="${MODE_FILTER:-both}"
 SCENARIO_FILTER="${SCENARIO_FILTER:-all}"
 RANDOM_PROMPTS="${RANDOM_PROMPTS:-32}"
+RANDOM_REQUEST_RATE="${RANDOM_REQUEST_RATE:-1}"
 LOGPROBS_PROMPTS="${LOGPROBS_PROMPTS:-32}"
 PREFIX_PROMPTS="${PREFIX_PROMPTS:-32}"
 KV_PREFIX_PROMPTS="${KV_PREFIX_PROMPTS:-32}"
@@ -83,7 +84,7 @@ should_run() {
 }
 
 for mode in true false; do
-  should_run random-online "$mode" && run_one random-online "$mode" "$COMMON_MODEL_14B" "$RANDOM_PROMPTS" 1 1024 256 4096 8 4096
+  should_run random-online "$mode" && run_one random-online "$mode" "$COMMON_MODEL_14B" "$RANDOM_PROMPTS" "$RANDOM_REQUEST_RATE" 1024 256 4096 8 4096
   should_run logprobs-online "$mode" && run_one logprobs-online "$mode" "$COMMON_MODEL_14B" "$LOGPROBS_PROMPTS" 1 1024 256 4096 8 4096 'BENCH_LOGPROBS=20'
   should_run prefix-repetition-online "$mode" && run_one prefix-repetition-online "$mode" "$COMMON_MODEL_14B" "$PREFIX_PROMPTS" 1 4096 256 8192 8 8192 'PREFIX_LEN=4096 PREFIX_SUFFIX_LEN=256 PREFIX_NUM_PREFIXES=10'
   should_run kv-tiering-prefix-online "$mode" && run_one kv-tiering-prefix-online "$mode" "$COMMON_MODEL_7B" "$KV_PREFIX_PROMPTS" 1 3840 256 8192 8 8192 'PREFIX_LEN=3840 PREFIX_SUFFIX_LEN=256 PREFIX_NUM_PREFIXES=10'

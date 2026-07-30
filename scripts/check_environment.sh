@@ -39,6 +39,7 @@ done
 
 if command -v python >/dev/null 2>&1; then
   python -c 'import ms_service_profiler' >/dev/null 2>&1 || fail "ms_service_profiler is unavailable in the active container"
+  python -c 'import msguard' >/dev/null 2>&1 || fail "msguard is unavailable in the active container; msServiceProfiler parser requires it"
 fi
 
 echo "environment_ok"

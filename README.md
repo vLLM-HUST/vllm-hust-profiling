@@ -73,6 +73,15 @@ SCENARIO_FILTER=random-online MODE_FILTER=both RANDOM_PROMPTS=32 \
   bash scripts/run_profiling.sh
 ```
 
+`random-online` request rate can be overridden with `RANDOM_REQUEST_RATE`.
+The default value remains 1. For example, to reproduce scheduler queueing
+under higher request pressure:
+
+```bash
+SCENARIO_FILTER=random-online MODE_FILTER=true RANDOM_PROMPTS=200 RANDOM_REQUEST_RATE=6 \
+  bash scripts/run_profiling.sh
+```
+
 ## 分析已有数据
 
 `run_profiling.sh` 完成后，使用实际的运行根目录执行：
