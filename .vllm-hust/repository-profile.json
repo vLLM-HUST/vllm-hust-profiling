@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "canonical_registry": "https://github.com/vLLM-HUST/vllm-hust-docs/tree/codex/ecosystem-architecture-reorganization/registry",
+  "repository": "https://github.com/vLLM-HUST/vllm-hust-profiling",
+  "repository_role": "analysis_tool",
+  "relation_to_runtime": "produces_runtime_evidence",
+  "lifecycle": "supported",
+  "artifacts": [
+    {
+      "id": "vllm-hust-profiling-workspace",
+      "artifact_type": "tool",
+      "system_role": "profiling_analysis",
+      "delivery_model": "source_repository",
+      "execution_planes": ["device", "offline"],
+      "integration_contracts": [],
+      "integration_surfaces": ["vLLM OpenAI-compatible API", "Ascend profiler outputs"]
+    }
+  ],
+  "system_boundaries": {
+    "is": ["a workload, collection, and offline analysis workspace for profiler evidence"],
+    "is_not": [
+      "an inference runtime or platform plugin",
+      "a repository for model weights, raw traces, or generated reports",
+      "a public performance claim without run provenance"
+    ]
+  },
+  "validation": ["bash scripts/check_environment.sh"],
+  "compatibility_document": "QUICKSTART.md"
+}
