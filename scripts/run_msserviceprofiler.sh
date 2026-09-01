@@ -45,6 +45,13 @@ BENCH_LOGPROBS="${BENCH_LOGPROBS:-20}"
 PREFIX_LEN="${PREFIX_LEN:-3840}"
 PREFIX_SUFFIX_LEN="${PREFIX_SUFFIX_LEN:-256}"
 PREFIX_NUM_PREFIXES="${PREFIX_NUM_PREFIXES:-10}"
+G0_ARM="${G0_ARM:-no_control}"
+G0_CONCURRENCY_CAP="${G0_CONCURRENCY_CAP:-4}"
+G0_TOKEN_BUCKET_RATE="${G0_TOKEN_BUCKET_RATE:-8}"
+G0_TOKEN_BUCKET_CAPACITY="${G0_TOKEN_BUCKET_CAPACITY:-4}"
+G0_ORACLE_BYTE_BUDGET="${G0_ORACLE_BYTE_BUDGET:-31850496}"
+G0_MINIMUM_RETRIEVE_TOKENS="${G0_MINIMUM_RETRIEVE_TOKENS:-256}"
+G0_FIXED_PREFETCH_DEPTH="${G0_FIXED_PREFETCH_DEPTH:-4}"
 DATASET_PATH="${DATASET_PATH:-}"
 BENCH_BACKEND="${BENCH_BACKEND:-openai}"
 BENCH_ENDPOINT="${BENCH_ENDPOINT:-/v1/completions}"
@@ -109,6 +116,30 @@ echo "[profile] VLLM_ASCEND_TORCH_PREFLIGHT=$VLLM_ASCEND_TORCH_PREFLIGHT"
 
 mkdir -p "$RAW_DIR" "$PARSED_DIR" "$BENCH_DIR" "$LOG_DIR"
 mkdir -p "$PROMETHEUS_MULTIPROC_DIR"
+export VLLM_G0_TELEMETRY_PATH="${VLLM_G0_TELEMETRY_PATH:-$RAW_DIR/g0_connector_telemetry.jsonl}"
+# A G0 observability worktree can be supplied without modifying the shared
+# vLLM-Ascend checkout. It contains telemetry only, never a scheduler policy.
+if [[ -n "${G0_VLLM_ASCEND_ROOT:-}" ]]; then
+  export PYTHONPATH="$G0_VLLM_ASCEND_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+fi
+# A source-only git worktree does not contain vLLM-Ascend's generated C
+# extension or custom CANN operator package. Reuse the matching, immutable
+# build products from the editable checkout while keeping all Python
+# instrumentation isolated in G0_VLLM_ASCEND_ROOT.
+if [[ -n "${G0_VLLM_ASCEND_NATIVE_ROOT:-}" ]]; then
+  G0_NATIVE_PACKAGE="$G0_VLLM_ASCEND_NATIVE_ROOT/vllm_ascend"
+  G0_CUSTOM_VENDOR="$G0_NATIVE_PACKAGE/_cann_ops_custom/vendors/custom_transformer"
+  G0_CUSTOM_LIB="$G0_CUSTOM_VENDOR/op_api/lib"
+  if [[ ! -d "$G0_CUSTOM_VENDOR" ]]; then
+    echo "ERROR: G0 native custom-op package not found: $G0_CUSTOM_VENDOR" >&2
+    exit 2
+  fi
+  export ASCEND_CUSTOM_OPP_PATH="$G0_CUSTOM_VENDOR${ASCEND_CUSTOM_OPP_PATH:+:$ASCEND_CUSTOM_OPP_PATH}"
+  export LD_LIBRARY_PATH="$G0_CUSTOM_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+if [[ -n "${G0_KV_TRANSFER_CONFIG:-}" && ",$VLLM_PLUGINS," != *,ascend_kv_connector,* ]]; then
+  export VLLM_PLUGINS="$VLLM_PLUGINS,ascend_kv_connector"
+fi
 
 # The profiler reads its output directory from the JSON config, not from
 # RUN_DIR.  Build a per-run config so repeated runs cannot write into an old
@@ -139,6 +170,7 @@ echo "[profile] profiler_config=$SERVICE_PROF_CONFIG_PATH"
 echo "[profile] profiler_timelimit=$PROFILER_TIMELIMIT"
 echo "[profile] enforce_eager=$ENFORCE_EAGER"
 echo "[profile] scenario=$PROFILE_SCENARIO"
+echo "[profile] g0_connector_telemetry=$VLLM_G0_TELEMETRY_PATH"
 
 if command -v npu-smi >/dev/null 2>&1; then
   npu-smi info || {
@@ -162,6 +194,11 @@ PY
 }
 
 cleanup() {
+  if [[ -n "${RESOURCE_SAMPLER_PID:-}" ]] && kill -0 "$RESOURCE_SAMPLER_PID" 2>/dev/null; then
+    kill -TERM "$RESOURCE_SAMPLER_PID" 2>/dev/null || true
+    wait "$RESOURCE_SAMPLER_PID" 2>/dev/null || true
+  fi
+  RESOURCE_SAMPLER_PID=""
   if [[ -n "${VLLM_PID:-}" ]] && kill -0 "$VLLM_PID" 2>/dev/null; then
     echo "[profile] stopping vLLM pid=$VLLM_PID"
     kill -TERM "$VLLM_PID" 2>/dev/null || true
@@ -189,12 +226,25 @@ VLLM_SERVER_ARGS=(
 if [[ -n "$ADDITIONAL_CONFIG" ]]; then
   VLLM_SERVER_ARGS+=(--additional-config "$ADDITIONAL_CONFIG")
 fi
+if [[ -n "${G0_KV_TRANSFER_CONFIG:-}" ]]; then
+  VLLM_SERVER_ARGS+=(--kv-transfer-config "$G0_KV_TRANSFER_CONFIG")
+  # Local prefix caching would satisfy repeated prefixes before AscendStore is
+  # consulted, producing a false no-materialization G0 run.
+  VLLM_SERVER_ARGS+=(--no-enable-prefix-caching)
+fi
 if [[ "$ENFORCE_EAGER" == "1" || "$ENFORCE_EAGER" == "true" ]]; then
   VLLM_SERVER_ARGS+=(--enforce-eager)
 fi
 "$VLLM_BIN" "${VLLM_SERVER_ARGS[@]}" \
   > >(tee "$LOG_DIR/vllm.log") 2>&1 &
 VLLM_PID=$!
+if [[ "$PROFILE_SCENARIO" == g0-trace-online ]]; then
+  "$PYTHON_BIN" "$SCRIPT_DIR/sample_g0_resources.py" \
+    --device "$DEVICE" \
+    --root-pid "$VLLM_PID" \
+    --output "$RAW_DIR/g0_resource_samples.jsonl" &
+  RESOURCE_SAMPLER_PID=$!
+fi
 
 echo "[profile] waiting for /health"
 for _ in $(seq 1 180); do
@@ -212,7 +262,35 @@ if ! health_check; then
   exit 4
 fi
 
-if command -v "$VLLM_BIN" >/dev/null 2>&1; then
+if [[ "$PROFILE_SCENARIO" == g0-trace-online ]]; then
+  if [[ ! -f "${G0_TRACE_PATH:-}" ]]; then
+    echo "ERROR: G0_TRACE_PATH is required for g0-trace-online" >&2
+    exit 5
+  fi
+  echo "[profile] replaying immutable G0 trace arm=$G0_ARM"
+  set +e
+  "$PYTHON_BIN" "$SCRIPT_DIR/replay_g0_trace.py" \
+    --trace "$G0_TRACE_PATH" \
+    --output "$BENCH_DIR/request_results.jsonl" \
+    --summary "$BENCH_DIR/random-online.json" \
+    --url "http://127.0.0.1:$PORT/v1/completions" \
+    --model "$SERVED_MODEL_NAME" \
+    --arm "$G0_ARM" \
+    --concurrency-cap "$G0_CONCURRENCY_CAP" \
+    --token-bucket-rate "$G0_TOKEN_BUCKET_RATE" \
+    --token-bucket-capacity "$G0_TOKEN_BUCKET_CAPACITY" \
+    --oracle-byte-budget "$G0_ORACLE_BYTE_BUDGET" \
+    --minimum-retrieve-tokens "$G0_MINIMUM_RETRIEVE_TOKENS" \
+    --fixed-prefetch-depth "$G0_FIXED_PREFETCH_DEPTH" \
+    2>&1 | tee "$LOG_DIR/benchmark.log"
+  BENCHMARK_STATUS=${PIPESTATUS[0]}
+  set -e
+  echo "[profile] benchmark_exit_code=$BENCHMARK_STATUS"
+  if [[ "$BENCHMARK_STATUS" -ne 0 || ! -s "$BENCH_DIR/random-online.json" || ! -s "$BENCH_DIR/request_results.jsonl" ]]; then
+    echo "ERROR: G0 trace replay failed or produced incomplete request artifacts" >&2
+    exit 5
+  fi
+elif command -v "$VLLM_BIN" >/dev/null 2>&1; then
   echo "[profile] running upstream vLLM CLI benchmark: $VLLM_BIN bench serve"
   case "$PROFILE_SCENARIO" in
     agent-research-online)
@@ -279,7 +357,10 @@ if command -v "$VLLM_BIN" >/dev/null 2>&1; then
       ;;
   esac
   set +e
-  "$VLLM_BIN" "${BENCH_ARGS[@]}" 2>&1 | tee "$LOG_DIR/benchmark.log"
+  # The load generator is a client, not part of the profiled service. Loading
+  # msserviceprofiler in that short-lived process adds no server evidence and
+  # triggers a known C++ callback crash during interpreter shutdown.
+  env VLLM_PLUGINS=ascend "$VLLM_BIN" "${BENCH_ARGS[@]}" 2>&1 | tee "$LOG_DIR/benchmark.log"
   BENCHMARK_STATUS=${PIPESTATUS[0]}
   set -e
   echo "[profile] benchmark_exit_code=$BENCHMARK_STATUS"
@@ -296,8 +377,8 @@ import json
 import sys
 
 result = json.loads(open(sys.argv[1]).read())
-completed = int(result.get("completed", 0))
-failed = int(result.get("failed", 0))
+completed = int(result.get("completed", result.get("correct_requests", 0)))
+failed = int(result.get("failed", result.get("requests", completed) - completed))
 if completed <= 0 or failed > 0:
     raise SystemExit(f"invalid benchmark result: completed={completed}, failed={failed}")
 PY
@@ -327,17 +408,16 @@ if ! find "$RAW_DIR" -type f -print -quit | grep -q .; then
 fi
 
 echo "[profile] parsing profiler data"
+PARSER_STATUS=0
+set +e
 PARSER_PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
 PYTHONPATH="$PARSER_PYTHONPATH" "$PYTHON_BIN" "$SCRIPT_DIR/parse_msserviceprofiler.py" parse \
   --input-path "$RAW_DIR" \
   --output-path "$PARSED_DIR" \
   --format db csv json \
   2>&1 | tee "$LOG_DIR/parse.log"
-
-if grep -Eq '[1-9][0-9]* tasks failed' "$LOG_DIR/parse.log"; then
-  echo "ERROR: msServiceProfiler completed with failed tasks; inspect $LOG_DIR/parse.log" >&2
-  exit 7
-fi
+PARSER_STATUS="${PIPESTATUS[0]}"
+set -e
 
 echo "[profile] completed"
 echo "[profile] output summary:"
@@ -362,3 +442,29 @@ for artifact in \
     printf '  [missing] %s\n' "$artifact"
   fi
 done
+if [[ -s "$VLLM_G0_TELEMETRY_PATH" ]]; then
+  printf '  [ok] raw/g0_connector_telemetry.jsonl\n'
+  G0_SUMMARY_ARGS=(
+    --input "$VLLM_G0_TELEMETRY_PATH"
+    --output "$PARSED_DIR/g0_connector_summary.json"
+    --expected-arm "$G0_ARM"
+    --benchmark-summary "$BENCH_DIR/random-online.json"
+  )
+  if [[ -s "$RAW_DIR/g0_resource_samples.jsonl" ]]; then
+    G0_SUMMARY_ARGS+=(--resources "$RAW_DIR/g0_resource_samples.jsonl")
+  fi
+  if [[ -s "$PARSED_DIR/chrome_tracing.json" ]]; then
+    G0_SUMMARY_ARGS+=(--chrome-trace "$PARSED_DIR/chrome_tracing.json")
+  fi
+  "$PYTHON_BIN" "$SCRIPT_DIR/summarize_g0_telemetry.py" "${G0_SUMMARY_ARGS[@]}"
+else
+  printf '  [missing] raw/g0_connector_telemetry.jsonl\n'
+  if [[ "${G0_REQUIRE_TELEMETRY:-0}" == 1 ]]; then
+    echo "ERROR: G0 requires activated connector telemetry" >&2
+    exit 8
+  fi
+fi
+if [[ "$PARSER_STATUS" -ne 0 ]] || grep -Eq '[1-9][0-9]* tasks failed' "$LOG_DIR/parse.log"; then
+  echo "ERROR: msServiceProfiler parse failed; G0 connector summary was preserved, inspect $LOG_DIR/parse.log" >&2
+  exit 7
+fi
